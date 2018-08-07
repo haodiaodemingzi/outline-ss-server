@@ -1,0 +1,25 @@
+settings:
+  legacy:
+    force: false
+    interval: 0s
+schema:
+- name: outline-ss-server
+  path: /home/noodles/go/src/github.com/nirocfz/outline-ss-server
+  args:
+  - -config="config_example.yml"
+  - -report="127.0.0.1:9876"
+  commands:
+    vet:
+      args:
+      - none
+    run:
+      status: true
+  watcher:
+    extensions:
+    - go
+    paths:
+    - /
+    ignored_paths:
+    - .git
+    - .realize
+    - vendor

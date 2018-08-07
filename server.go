@@ -16,6 +16,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -48,6 +49,13 @@ type SSPort struct {
 	listener   *net.TCPListener
 	packetConn net.PacketConn
 	keys       map[string]shadowaead.Cipher
+}
+
+type traffic struct {
+	ID       string
+	IP       string
+	ReqBytes int64
+	ResBytes int64
 }
 
 func findAccessKey(clientConn onet.DuplexConn, cipherList map[string]shadowaead.Cipher) (string, onet.DuplexConn, error) {
@@ -94,8 +102,17 @@ type connectionError struct {
 	cause   error
 }
 
+func TrafficToJSON(t *traffic) string {
+	b, err := json.Marshal(t)
+	if err != nil {
+		fmt.Println(err)
+		return ""
+	}
+	return string(b)
+}
+
 // Listen on addr for incoming connections.
-func (port *SSPort) run(m metrics.ShadowsocksMetrics) {
+func (port *SSPort) run(m metrics.ShadowsocksMetrics, r *net.UDPConn) {
 	go udpRemote(port.packetConn, port.keys, m)
 	for {
 		var clientConn onet.DuplexConn
@@ -127,6 +144,17 @@ func (port *SSPort) run(m metrics.ShadowsocksMetrics) {
 					status = connError.status
 				}
 				log.Printf("Done with status %v, duration %v", status, connDuration)
+				t := TrafficToJSON(&traffic{
+					ID:       keyID,
+					IP:       clientConn.RemoteAddr().String(),
+					ReqBytes: proxyMetrics.ProxyTarget,
+					ResBytes: proxyMetrics.ProxyClient,
+				})
+				r.Write([]byte(t))
+				// _, err := r.Write([]byte(t))
+				// if err != nil {
+				// 	log.Printf("WARN report traffic failed, err: %v, traffic: %v", err, t)
+				// }
 				m.AddClosedTCPConnection(keyID, status, proxyMetrics, connDuration)
 			}()
 
@@ -161,8 +189,9 @@ func (port *SSPort) run(m metrics.ShadowsocksMetrics) {
 }
 
 type SSServer struct {
-	m     metrics.ShadowsocksMetrics
-	ports map[int]*SSPort
+	m      metrics.ShadowsocksMetrics
+	ports  map[int]*SSPort
+	report *net.UDPConn
 }
 
 func (s *SSServer) startPort(portNum int) error {
@@ -177,7 +206,7 @@ func (s *SSServer) startPort(portNum int) error {
 	log.Printf("INFO Listening TCP and UDP on port %v", portNum)
 	port := &SSPort{listener: listener, packetConn: packetConn, keys: make(map[string]shadowaead.Cipher)}
 	s.ports[portNum] = port
-	go port.run(s.m)
+	go port.run(s.m, s.report)
 	return nil
 }
 
@@ -246,12 +275,22 @@ func (s *SSServer) loadConfig(filename string) error {
 	return nil
 }
 
-func runSSServer(filename string) error {
-	server := &SSServer{m: metrics.NewShadowsocksMetrics(), ports: make(map[int]*SSPort)}
-	err := server.loadConfig(filename)
+func runSSServer(filename string, reportAddr string) error {
+	addr, err := net.ResolveUDPAddr("udp", reportAddr)
+	if err != nil {
+		return fmt.Errorf("WARN Could not resolve addr: %v", reportAddr)
+	}
+	conn, err := net.DialUDP("udp", nil, addr)
+	if err != nil {
+		log.Printf("WARN Could not dial: %v", reportAddr)
+	}
+
+	server := &SSServer{m: metrics.NewShadowsocksMetrics(), ports: make(map[int]*SSPort), report: conn}
+	err = server.loadConfig(filename)
 	if err != nil {
 		return fmt.Errorf("Failed to load config file %v: %v", filename, err)
 	}
+
 	sigHup := make(chan os.Signal, 1)
 	signal.Notify(sigHup, syscall.SIGHUP)
 	go func() {
@@ -288,10 +327,12 @@ func main() {
 	var flags struct {
 		ConfigFile  string
 		MetricsAddr string
+		ReportAddr  string
 	}
 	flag.StringVar(&flags.ConfigFile, "config", "", "config filename")
 	flag.StringVar(&flags.MetricsAddr, "metrics", "", "address for the Prometheus metrics")
 	flag.DurationVar(&config.UDPTimeout, "udptimeout", 5*time.Minute, "UDP tunnel timeout")
+	flag.StringVar(&flags.ReportAddr, "report", "", "address to report traffic")
 
 	flag.Parse()
 
@@ -308,7 +349,7 @@ func main() {
 		log.Printf("Metrics on http://%v/metrics", flags.MetricsAddr)
 	}
 
-	err := runSSServer(flags.ConfigFile)
+	err := runSSServer(flags.ConfigFile, flags.ReportAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
