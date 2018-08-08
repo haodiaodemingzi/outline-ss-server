@@ -35,7 +35,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/shadowsocks/go-shadowsocks2/core"
-	ssnet "github.com/shadowsocks/go-shadowsocks2/net"
 	"github.com/shadowsocks/go-shadowsocks2/shadowaead"
 	"github.com/shadowsocks/go-shadowsocks2/socks"
 	"gopkg.in/yaml.v2"
@@ -63,7 +62,9 @@ func findAccessKey(clientConn onet.DuplexConn, cipherList map[string]shadowaead.
 		return "", nil, errors.New("Empty cipher list")
 	} else if len(cipherList) == 1 {
 		for id, cipher := range cipherList {
-			return id, shadowaead.NewConn(clientConn, cipher).(onet.DuplexConn), nil
+			reader := shadowaead.NewShadowsocksReader(clientConn, cipher)
+			writer := shadowaead.NewShadowsocksWriter(clientConn, cipher)
+			return id, onet.WrapConn(clientConn, reader, writer), nil
 		}
 	}
 	// buffer saves the bytes read from shadowConn, in order to allow for replays.
@@ -90,7 +91,7 @@ func findAccessKey(clientConn onet.DuplexConn, cipherList map[string]shadowaead.
 		// read so far.
 		ssr := shadowaead.NewShadowsocksReader(io.MultiReader(&buffer, clientConn), cipher)
 		ssw := shadowaead.NewShadowsocksWriter(clientConn, cipher)
-		return id, ssnet.WrapConn(clientConn, ssr, ssw).(onet.DuplexConn), nil
+		return id, onet.WrapConn(clientConn, ssr, ssw).(onet.DuplexConn), nil
 	}
 	return "", nil, fmt.Errorf("could not find valid key")
 }
@@ -245,6 +246,9 @@ func (s *SSServer) loadConfig(filename string) error {
 		}
 		cipher, err := core.PickCipher(keyConfig.Cipher, nil, keyConfig.Secret)
 		if err != nil {
+			if err == core.ErrCipherNotSupported {
+				return fmt.Errorf("Cipher %v for key %v is not supported", keyConfig.Cipher, keyConfig.ID)
+			}
 			return fmt.Errorf("Failed to create cipher for key %v: %v", keyConfig.ID, err)
 		}
 		aead, ok := cipher.(shadowaead.Cipher)
