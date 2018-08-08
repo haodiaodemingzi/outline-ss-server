@@ -151,11 +151,13 @@ func (port *SSPort) run(m metrics.ShadowsocksMetrics, r *net.UDPConn) {
 					ReqBytes: proxyMetrics.ProxyTarget,
 					ResBytes: proxyMetrics.ProxyClient,
 				})
-				r.Write([]byte(t))
-				// _, err := r.Write([]byte(t))
-				// if err != nil {
-				// 	log.Printf("WARN report traffic failed, err: %v, traffic: %v", err, t)
-				// }
+				if r != nil {
+					r.Write([]byte(t))
+					// _, err := r.Write([]byte(t))
+					// if err != nil {
+					// 	log.Printf("WARN report traffic failed, err: %v, traffic: %v", err, t)
+					// }
+				}
 				m.AddClosedTCPConnection(keyID, status, proxyMetrics, connDuration)
 			}()
 
