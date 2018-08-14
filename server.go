@@ -114,7 +114,8 @@ func TrafficToJSON(t *traffic) string {
 
 // Listen on addr for incoming connections.
 func (port *SSPort) run(m metrics.ShadowsocksMetrics, r *net.UDPConn) {
-	go udpRemote(port.packetConn, port.keys, m)
+	// TODO: Register initial data metrics at zero.
+	go udpRemote(port.packetConn, &port.keys, m)
 	for {
 		var clientConn onet.DuplexConn
 		clientConn, err := port.listener.AcceptTCP()
