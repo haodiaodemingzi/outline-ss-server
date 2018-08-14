@@ -51,10 +51,10 @@ type SSPort struct {
 }
 
 type traffic struct {
-	ID       string
-	IP       string
-	ReqBytes int64
-	ResBytes int64
+	UserID   string `json:"userID"`
+	Client   string `json:"client"`
+	ReqBytes int64  `json:"reqBytes"`
+	ResBytes int64  `json:"resBytes"`
 }
 
 func findAccessKey(clientConn onet.DuplexConn, cipherList map[string]shadowaead.Cipher) (string, onet.DuplexConn, error) {
@@ -147,8 +147,8 @@ func (port *SSPort) run(m metrics.ShadowsocksMetrics, r *net.UDPConn) {
 				}
 				log.Printf("Done with status %v, duration %v", status, connDuration)
 				t := TrafficToJSON(&traffic{
-					ID:       keyID,
-					IP:       clientConn.RemoteAddr().String(),
+					UserID:   keyID,
+					Client:   clientConn.RemoteAddr().String(),
 					ReqBytes: proxyMetrics.ProxyTarget,
 					ResBytes: proxyMetrics.ProxyClient,
 				})
