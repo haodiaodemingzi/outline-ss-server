@@ -39,6 +39,8 @@ var config struct {
 	UDPTimeout time.Duration
 }
 
+var ipCiphers = make(map[string][]string)
+
 type SSPort struct {
 	listener   *net.TCPListener
 	packetConn net.PacketConn

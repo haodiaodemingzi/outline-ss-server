@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/Jigsaw-Code/outline-ss-server/metrics"
@@ -35,13 +36,31 @@ const udpBufSize = 64 * 1024
 
 // upack decripts src into dst. It tries each cipher until it finds one that authenticates
 // correctly. dst and src must not overlap.
-func unpack(dst, src []byte, ciphers map[string]shadowaead.Cipher) ([]byte, string, shadowaead.Cipher, error) {
+func unpack(dst, src []byte, addr net.Addr, ciphers map[string]shadowaead.Cipher) ([]byte, string, shadowaead.Cipher, error) {
+	ip := strings.Split(addr.String(), ":")[0]
+	if list, ok := ipCiphers[ip]; ok {
+		for _, id := range list {
+			log.Printf("In Small List, Trying UDP cipher %v", id)
+			buf, err := shadowaead.Unpack(dst, src, ciphers[id])
+			if err != nil {
+				log.Printf("In Small List, Failed UDP cipher %v: %v", id, err)
+				continue
+			}
+			log.Printf("In Small List, Selected UDP cipher %v", id)
+			return buf, id, ciphers[id], nil
+		}
+	}
 	for id, cipher := range ciphers {
 		log.Printf("Trying UDP cipher %v", id)
 		buf, err := shadowaead.Unpack(dst, src, cipher)
 		if err != nil {
 			log.Printf("Failed UDP cipher %v: %v", id, err)
 			continue
+		}
+		if list, ok := ipCiphers[ip]; ok {
+			ipCiphers[ip] = append(list, id)
+		} else {
+			ipCiphers[ip] = []string{id}
 		}
 		log.Printf("Selected UDP cipher %v", id)
 		return buf, id, cipher, nil
@@ -81,7 +100,7 @@ func runUDPService(clientConn net.PacketConn, ciphers *map[string]shadowaead.Cip
 			}
 			defer log.Printf("DEBUG UDP done with %v", clientAddr.String())
 			log.Printf("DEBUG UDP Request from %v with %v bytes", clientAddr, clientProxyBytes)
-			buf, keyID, cipher, err := unpack(textBuf, cipherBuf[:clientProxyBytes], *ciphers)
+			buf, keyID, cipher, err := unpack(textBuf, cipherBuf[:clientProxyBytes], clientAddr, *ciphers)
 			if err != nil {
 				return &connectionError{"ERR_CIPHER", "Failed to upack data from client", err}
 			}

@@ -21,6 +21,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/Jigsaw-Code/outline-ss-server/metrics"
@@ -46,6 +47,28 @@ func findAccessKey(clientConn onet.DuplexConn, cipherList map[string]shadowaead.
 	// This assumes that all ciphers are AEAD.
 	// TODO: Reorder list to try previously successful ciphers first for the client IP.
 	// TODO: Ban and log client IPs with too many failures too quick to protect against DoS.
+	ip := strings.Split(clientConn.RemoteAddr().String(), ":")[0]
+	if list, ok := ipCiphers[ip]; ok {
+		for _, id := range list {
+			log.Printf("In Small List, Trying key %v", id)
+			// tmpReader reads first from the replayBuffer and then from clientConn if it needs more
+			// bytes. All bytes read from clientConn are saved in replayBuffer for future replays.
+			tmpReader := io.MultiReader(bytes.NewReader(replayBuffer.Bytes()), io.TeeReader(clientConn, &replayBuffer))
+			cipherReader := shadowaead.NewShadowsocksReader(tmpReader, cipherList[id])
+			// Read should read just enough data to authenticate the payload size.
+			_, err := cipherReader.Read(make([]byte, 0))
+			if err != nil {
+				log.Printf("In Small List, Failed key %v: %v", id, err)
+				continue
+			}
+			log.Printf("In Small List, Selected key %v", id)
+			// We don't need to keep storing and replaying the bytes anymore, but we don't want to drop
+			// those already read into the replayBuffer.
+			ssr := shadowaead.NewShadowsocksReader(io.MultiReader(&replayBuffer, clientConn), cipherList[id])
+			ssw := shadowaead.NewShadowsocksWriter(clientConn, cipherList[id])
+			return id, onet.WrapConn(clientConn, ssr, ssw).(onet.DuplexConn), nil
+		}
+	}
 	for id, cipher := range cipherList {
 		log.Printf("Trying key %v", id)
 		// tmpReader reads first from the replayBuffer and then from clientConn if it needs more
@@ -57,6 +80,11 @@ func findAccessKey(clientConn onet.DuplexConn, cipherList map[string]shadowaead.
 		if err != nil {
 			log.Printf("Failed key %v: %v", id, err)
 			continue
+		}
+		if list, ok := ipCiphers[ip]; ok {
+			ipCiphers[ip] = append(list, id)
+		} else {
+			ipCiphers[ip] = []string{id}
 		}
 		log.Printf("Selected key %v", id)
 		// We don't need to keep storing and replaying the bytes anymore, but we don't want to drop
