@@ -15,6 +15,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -39,7 +40,7 @@ var config struct {
 	UDPTimeout time.Duration
 }
 
-var ipCiphers = make(map[string][]string)
+var ipCiphers = make(map[uint32][]string)
 
 type SSPort struct {
 	listener   *net.TCPListener
@@ -59,6 +60,23 @@ type traffic struct {
 	Client   string `json:"client"`
 	ReqBytes int64  `json:"reqBytes"`
 	ResBytes int64  `json:"resBytes"`
+}
+
+func ip2int(ip net.IP) uint32 {
+	if len(ip) == 16 {
+		return binary.BigEndian.Uint32(ip[12:16])
+	}
+	return binary.BigEndian.Uint32(ip)
+}
+
+func getIPFromAddr(remoteAddr net.Addr) uint32 {
+	var ip uint32 = 0
+	switch addr := remoteAddr.(type) {
+	case *net.UDPAddr:
+	case *net.TCPAddr:
+		ip = ip2int(addr.IP)
+	}
+	return ip
 }
 
 func trafficToJSON(t *traffic) string {

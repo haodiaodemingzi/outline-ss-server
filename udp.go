@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/Jigsaw-Code/outline-ss-server/metrics"
@@ -37,17 +36,19 @@ const udpBufSize = 64 * 1024
 // upack decripts src into dst. It tries each cipher until it finds one that authenticates
 // correctly. dst and src must not overlap.
 func unpack(dst, src []byte, addr net.Addr, ciphers map[string]shadowaead.Cipher) ([]byte, string, shadowaead.Cipher, error) {
-	ip := strings.Split(addr.String(), ":")[0]
-	if list, ok := ipCiphers[ip]; ok {
-		for _, id := range list {
-			log.Printf("In Small List, Trying UDP cipher %v", id)
-			buf, err := shadowaead.Unpack(dst, src, ciphers[id])
-			if err != nil {
-				log.Printf("In Small List, Failed UDP cipher %v: %v", id, err)
-				continue
+	ip := getIPFromAddr(addr)
+	if ip > 0 {
+		if list, ok := ipCiphers[ip]; ok {
+			for _, id := range list {
+				log.Printf("In Small List, Trying UDP cipher %v", id)
+				buf, err := shadowaead.Unpack(dst, src, ciphers[id])
+				if err != nil {
+					log.Printf("In Small List, Failed UDP cipher %v: %v", id, err)
+					continue
+				}
+				log.Printf("In Small List, Selected UDP cipher %v", id)
+				return buf, id, ciphers[id], nil
 			}
-			log.Printf("In Small List, Selected UDP cipher %v", id)
-			return buf, id, ciphers[id], nil
 		}
 	}
 	for id, cipher := range ciphers {
@@ -57,10 +58,12 @@ func unpack(dst, src []byte, addr net.Addr, ciphers map[string]shadowaead.Cipher
 			log.Printf("Failed UDP cipher %v: %v", id, err)
 			continue
 		}
-		if list, ok := ipCiphers[ip]; ok {
-			ipCiphers[ip] = append(list, id)
-		} else {
-			ipCiphers[ip] = []string{id}
+		if ip > 0 {
+			if list, ok := ipCiphers[ip]; ok {
+				ipCiphers[ip] = append(list, id)
+			} else {
+				ipCiphers[ip] = []string{id}
+			}
 		}
 		log.Printf("Selected UDP cipher %v", id)
 		return buf, id, cipher, nil
