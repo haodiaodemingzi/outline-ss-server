@@ -17,7 +17,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"time"
 
@@ -40,13 +39,13 @@ func unpack(dst, src []byte, addr net.Addr, ciphers map[string]shadowaead.Cipher
 	if ip > 0 {
 		if list, ok := ipCiphers[ip]; ok {
 			for _, id := range list {
-				log.Printf("In Small List, Trying UDP cipher %v", id)
+				logger.Debugf("In Small List, Trying UDP cipher %v", id)
 				buf, err := shadowaead.Unpack(dst, src, ciphers[id])
 				if err != nil {
-					log.Printf("In Small List, Failed UDP cipher %v: %v", id, err)
+					logger.Debugf("In Small List, Failed UDP cipher %v: %v", id, err)
 					continue
 				}
-				log.Printf("In Small List, Selected UDP cipher %v", id)
+				logger.Debugf("In Small List, Selected UDP cipher %v", id)
 				return buf, id, ciphers[id], nil
 			}
 		}
@@ -103,7 +102,7 @@ func runUDPService(clientConn net.PacketConn, ciphers *map[string]shadowaead.Cip
 			}
 			defer logger.Debugf("UDP done with %v", clientAddr.String())
 			logger.Debugf("UDP Request from %v with %v bytes", clientAddr, clientProxyBytes)
-			buf, keyID, cipher, err := unpack(textBuf, cipherBuf[:clientProxyBytes], *ciphers)
+			buf, keyID, cipher, err := unpack(textBuf, cipherBuf[:clientProxyBytes], clientAddr, *ciphers)
 			if err != nil {
 				return &connectionError{"ERR_CIPHER", "Failed to upack data from client", err}
 			}

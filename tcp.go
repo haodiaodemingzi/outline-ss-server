@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"time"
 
@@ -52,7 +51,7 @@ func findAccessKey(clientConn onet.DuplexConn, cipherList map[string]shadowaead.
 	if ip > 0 {
 		if list, ok := ipCiphers[ip]; ok {
 			for _, id := range list {
-				log.Printf("In Small List, Trying key %v", id)
+				logger.Debugf("In Small List, Trying key %v", id)
 				// tmpReader reads first from the replayBuffer and then from clientConn if it needs more
 				// bytes. All bytes read from clientConn are saved in replayBuffer for future replays.
 				tmpReader := io.MultiReader(bytes.NewReader(replayBuffer.Bytes()), io.TeeReader(clientConn, &replayBuffer))
@@ -60,10 +59,10 @@ func findAccessKey(clientConn onet.DuplexConn, cipherList map[string]shadowaead.
 				// Read should read just enough data to authenticate the payload size.
 				_, err := cipherReader.Read(make([]byte, 0))
 				if err != nil {
-					log.Printf("In Small List, Failed key %v: %v", id, err)
+					logger.Debugf("In Small List, Failed key %v: %v", id, err)
 					continue
 				}
-				log.Printf("In Small List, Selected key %v", id)
+				logger.Debugf("In Small List, Selected key %v", id)
 				// We don't need to keep storing and replaying the bytes anymore, but we don't want to drop
 				// those already read into the replayBuffer.
 				ssr := shadowaead.NewShadowsocksReader(io.MultiReader(&replayBuffer, clientConn), cipherList[id])
