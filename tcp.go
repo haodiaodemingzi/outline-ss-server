@@ -73,7 +73,7 @@ func findAccessKey(clientConn onet.DuplexConn, cipherList map[string]shadowaead.
 		}
 	}
 	for id, cipher := range cipherList {
-		log.Printf("Trying key %v", id)
+		logger.Debugf("Trying key %v", id)
 		// tmpReader reads first from the replayBuffer and then from clientConn if it needs more
 		// bytes. All bytes read from clientConn are saved in replayBuffer for future replays.
 		tmpReader := io.MultiReader(bytes.NewReader(replayBuffer.Bytes()), io.TeeReader(clientConn, &replayBuffer))
@@ -81,7 +81,7 @@ func findAccessKey(clientConn onet.DuplexConn, cipherList map[string]shadowaead.
 		// Read should read just enough data to authenticate the payload size.
 		_, err := cipherReader.Read(make([]byte, 0))
 		if err != nil {
-			log.Printf("Failed key %v: %v", id, err)
+			logger.Debugf("Failed key %v: %v", id, err)
 			continue
 		}
 		if ip > 0 {
@@ -91,7 +91,7 @@ func findAccessKey(clientConn onet.DuplexConn, cipherList map[string]shadowaead.
 				ipCiphers[ip] = []string{id}
 			}
 		}
-		log.Printf("Selected key %v", id)
+		logger.Debugf("Selected key %v", id)
 		// We don't need to keep storing and replaying the bytes anymore, but we don't want to drop
 		// those already read into the replayBuffer.
 		ssr := shadowaead.NewShadowsocksReader(io.MultiReader(&replayBuffer, clientConn), cipher)
@@ -106,7 +106,7 @@ func runTCPService(listener *net.TCPListener, ciphers *map[string]shadowaead.Cip
 		var clientConn onet.DuplexConn
 		clientConn, err := listener.AcceptTCP()
 		if err != nil {
-			log.Printf("failed to accept: %v", err)
+			logger.Debugf("failed to accept: %v", err)
 			continue
 		}
 		m.AddOpenTCPConnection()
@@ -114,7 +114,7 @@ func runTCPService(listener *net.TCPListener, ciphers *map[string]shadowaead.Cip
 		go func() (connError *connectionError) {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("ERROR Panic in TCP handler: %v", r)
+					logger.Errorf("Panic in TCP handler: %v", r)
 				}
 			}()
 			connStart := time.Now()
@@ -128,10 +128,10 @@ func runTCPService(listener *net.TCPListener, ciphers *map[string]shadowaead.Cip
 				clientConn.Close()
 				status := "OK"
 				if connError != nil {
-					log.Printf("ERROR [TCP] %v: %v", connError.message, connError.cause)
+					logger.Debugf("TCP Error: %v: %v", connError.message, connError.cause)
 					status = connError.status
 				}
-				log.Printf("Done with status %v, duration %v", status, connDuration)
+				logger.Debugf("Done with status %v, duration %v", status, connDuration)
 				t := trafficToJSON(&traffic{
 					UserID:   keyID,
 					Client:   clientConn.RemoteAddr().String(),
@@ -174,7 +174,7 @@ func runTCPService(listener *net.TCPListener, ciphers *map[string]shadowaead.Cip
 			tgtConn := metrics.MeasureConn(tgtTCPConn, &proxyMetrics.ProxyTarget, &proxyMetrics.TargetProxy)
 
 			// TODO: Disable logging in production. This is sensitive.
-			log.Printf("proxy %s <-> %s", clientConn.RemoteAddr().String(), tgtConn)
+			logger.Debugf("proxy %s <-> %s", clientConn.RemoteAddr().String(), tgtConn.RemoteAddr().String())
 			_, _, err = onet.Relay(clientConn, tgtConn)
 			if err != nil {
 				return &connectionError{"ERR_RELAY", "Failed to relay traffic", err}
