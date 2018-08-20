@@ -20,7 +20,6 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -194,17 +193,20 @@ func (s *SSServer) loadConfig(filename string) error {
 }
 
 func runSSServer(filename string, reportAddr string) error {
-	addr, err := net.ResolveUDPAddr("udp", reportAddr)
-	if err != nil {
-		return fmt.Errorf("WARN Could not resolve addr: %v", reportAddr)
-	}
-	conn, err := net.DialUDP("udp", nil, addr)
-	if err != nil {
-		log.Printf("WARN Could not dial: %v", reportAddr)
+	var conn *net.UDPConn
+	if len(reportAddr) > 0 {
+		addr, err := net.ResolveUDPAddr("udp", reportAddr)
+		if err != nil {
+			return fmt.Errorf("WARN Could not resolve addr: %v", reportAddr)
+		}
+		conn, err = net.DialUDP("udp", nil, addr)
+		if err != nil {
+			logger.Errorf("WARN Could not dial: %v", reportAddr)
+		}
 	}
 
 	server := &SSServer{m: metrics.NewShadowsocksMetrics(), ports: make(map[int]*SSPort), report: conn}
-	err = server.loadConfig(filename)
+	err := server.loadConfig(filename)
 	if err != nil {
 		return fmt.Errorf("Failed to load config file %v: %v", filename, err)
 	}
