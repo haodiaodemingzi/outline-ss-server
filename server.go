@@ -78,7 +78,7 @@ func ip2int(ip net.IP) uint32 {
 }
 
 func getIPFromAddr(remoteAddr net.Addr) uint32 {
-	var ip uint32 = 0
+	var ip uint32
 	switch addr := remoteAddr.(type) {
 	case *net.UDPAddr:
 	case *net.TCPAddr:
