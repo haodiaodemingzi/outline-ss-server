@@ -38,7 +38,7 @@ import (
 var logger *logging.Logger
 
 func init() {
-	logging.SetFormatter(logging.MustStringFormatter("%{color}%{level:.1s}%{time:0102 15:04:05.999999} %{pid} %{shortfile}]%{color:reset} %{message}"))
+	logging.SetFormatter(logging.MustStringFormatter("%{color}%{level:.1s}%{time:2006-01-02T15:04:05.000Z07:00} %{pid} %{shortfile}]%{color:reset} %{message}"))
 	logging.SetBackend(logging.NewLogBackend(os.Stderr, "", 0))
 	logger = logging.MustGetLogger("")
 }
@@ -77,7 +77,7 @@ func ip2int(ip net.IP) uint32 {
 }
 
 func getIPFromAddr(remoteAddr net.Addr) uint32 {
-	var ip uint32 = 0
+	var ip uint32
 	switch addr := remoteAddr.(type) {
 	case *net.UDPAddr:
 	case *net.TCPAddr:
