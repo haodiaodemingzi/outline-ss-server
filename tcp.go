@@ -108,9 +108,15 @@ func runTCPService(listener *net.TCPListener, ciphers *map[string]shadowaead.Cip
 			logger.Debugf("failed to accept: %v", err)
 			continue
 		}
-		m.AddOpenTCPConnection()
 
 		go func() (connError *connectionError) {
+			clientLocation, err := m.GetLocation(clientConn.RemoteAddr())
+			if err != nil {
+				logger.Errorf("Failed location lookup: %v", err)
+				clientLocation = "ZZ"
+			}
+			logger.Debugf("Got location \"%v\" for IP %v", clientLocation, clientConn.RemoteAddr().String())
+			m.AddOpenTCPConnection(clientLocation)
 			defer func() {
 				if r := recover(); r != nil {
 					logger.Errorf("Panic in TCP handler: %v", r)
@@ -144,7 +150,7 @@ func runTCPService(listener *net.TCPListener, ciphers *map[string]shadowaead.Cip
 					// 	log.Printf("WARN report traffic failed, err: %v, traffic: %v", err, t)
 					// }
 				}
-				m.AddClosedTCPConnection(keyID, status, proxyMetrics, connDuration)
+				m.AddClosedTCPConnection(clientLocation, keyID, status, proxyMetrics, connDuration)
 			}()
 
 			keyID, clientConn, err := findAccessKey(clientConn, *ciphers)
