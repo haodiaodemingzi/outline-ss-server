@@ -6,7 +6,7 @@ schema:
 - name: outline-ss-server
   path: /home/noodles/go/src/github.com/nirocfz/outline-ss-server
   args:
-  - -config="config.yml"
+  - -config="config_example.yml"
   - -report="127.0.0.1:42234"
   - -verbose
   commands:

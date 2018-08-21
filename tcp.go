@@ -46,7 +46,6 @@ func findAccessKey(clientConn onet.DuplexConn, cipherList map[string]shadowaead.
 	// TODO: Reorder list to try previously successful ciphers first for the client IP.
 	// TODO: Ban and log client IPs with too many failures too quick to protect against DoS.
 	ip := getIPFromAddr(clientConn.RemoteAddr())
-	fmt.Println(ip)
 	// ip := strings.Split(clientConn.RemoteAddr().String(), ":")[0]
 	if ip > 0 {
 		if list, ok := ipCiphers[ip]; ok {
