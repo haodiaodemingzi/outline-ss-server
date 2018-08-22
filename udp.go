@@ -35,34 +35,35 @@ const udpBufSize = 64 * 1024
 // upack decripts src into dst. It tries each cipher until it finds one that authenticates
 // correctly. dst and src must not overlap.
 func unpack(dst, src []byte, addr net.Addr, ciphers map[string]shadowaead.Cipher) ([]byte, string, shadowaead.Cipher, error) {
-	ip := getIPFromAddr(addr)
-	if ip > 0 {
-		if list, ok := ipCiphers[ip]; ok {
-			for _, id := range list {
-				logger.Debugf("In Small List, Trying UDP cipher %v", id)
-				buf, err := shadowaead.Unpack(dst, src, ciphers[id])
-				if err != nil {
-					logger.Debugf("In Small List, Failed UDP cipher %v: %v", id, err)
-					continue
-				}
-				logger.Debugf("In Small List, Selected UDP cipher %v", id)
-				return buf, id, ciphers[id], nil
+	ip, _ := getIPFromAddr(addr)
+	var meta *IPMeta
+	if ip <= 0 {
+		return nil, "", nil, errors.New("invalid ip")
+	}
+	meta, _ = ipCiphers[ip]
+	if meta != nil {
+		if meta.ban {
+			return nil, "", nil, errors.New("banned")
+		}
+		list := meta.cipherIDList
+		for _, id := range list {
+			logger.Debugf("In Small List, Trying UDP cipher %v", id)
+			buf, err := shadowaead.Unpack(dst, src, ciphers[id])
+			if err != nil {
+				logger.Debugf("In Small List, Failed UDP cipher %v: %v", id, err)
+				continue
 			}
+			logger.Debugf("In Small List, Selected UDP cipher %v", id)
+			return buf, id, ciphers[id], nil
 		}
 	}
+
 	for id, cipher := range ciphers {
 		logger.Debugf("Trying UDP cipher %v", id)
 		buf, err := shadowaead.Unpack(dst, src, cipher)
 		if err != nil {
 			logger.Debugf("Failed UDP cipher %v: %v", id, err)
 			continue
-		}
-		if ip > 0 {
-			if list, ok := ipCiphers[ip]; ok {
-				ipCiphers[ip] = append(list, id)
-			} else {
-				ipCiphers[ip] = []string{id}
-			}
 		}
 		logger.Debugf("Selected UDP cipher %v", id)
 		return buf, id, cipher, nil

@@ -49,7 +49,16 @@ var config struct {
 	UDPTimeout time.Duration
 }
 
-var ipCiphers = make(map[uint32][]string)
+type IPMeta struct {
+	cipherIDList []string
+	last         int64
+	ban          bool
+	tries        int
+	second       int64
+	banTime      int64
+}
+
+var ipCiphers = make(map[uint32]*IPMeta)
 
 type SSPort struct {
 	listener   *net.TCPListener
@@ -78,15 +87,18 @@ func ip2int(ip net.IP) uint32 {
 	return binary.BigEndian.Uint32(ip)
 }
 
-func getIPFromAddr(remoteAddr net.Addr) uint32 {
+func getIPFromAddr(remoteAddr net.Addr) (uint32, string) {
 	var ip uint32
+	var str string
 	switch addr := remoteAddr.(type) {
 	case *net.UDPAddr:
+		str = addr.IP.String()
 		ip = ip2int(addr.IP)
 	case *net.TCPAddr:
+		str = addr.IP.String()
 		ip = ip2int(addr.IP)
 	}
-	return ip
+	return ip, str
 }
 
 func trafficToJSON(t *traffic) string {
