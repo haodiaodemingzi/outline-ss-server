@@ -80,6 +80,22 @@ type traffic struct {
 	ResBytes int64  `json:"resBytes"`
 }
 
+func cleanExpired() {
+	if len(ipCiphers) < 10000 {
+		return
+	}
+	now := time.Now().Unix()
+	for k, v := range ipCiphers {
+		if now-v.last > 3600 {
+			// https://stackoverflow.com/questions/23229975/is-it-safe-to-remove-selected-keys-from-map-within-a-range-loop
+			// this is safe
+			v = nil
+			logger.Infof("Clean %v from ipCiphers", k)
+			delete(ipCiphers, k)
+		}
+	}
+}
+
 func ip2int(ip net.IP) uint32 {
 	if len(ip) == 16 {
 		return binary.BigEndian.Uint32(ip[12:16])

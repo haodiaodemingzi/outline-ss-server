@@ -188,6 +188,7 @@ func runTCPService(listener *net.TCPListener, ciphers *map[string]shadowaead.Cip
 			}()
 
 			keyID, clientConn, err := findAccessKey(clientConn, *ciphers)
+			cleanExpired()
 			if err != nil {
 				return &connectionError{"ERR_CIPHER", "Failed to find a valid cipher", err}
 			}
