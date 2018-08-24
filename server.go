@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"syscall"
 	"time"
 
@@ -80,18 +81,32 @@ type traffic struct {
 	ResBytes int64  `json:"resBytes"`
 }
 
+type pair struct {
+	ip   uint32
+	last int64
+}
+
 func cleanExpired() {
 	if len(ipCiphers) < 10000 {
 		return
 	}
 	now := time.Now().Unix()
+
+	var pl []pair
 	for k, v := range ipCiphers {
-		if now-v.last > 3600 {
-			// https://stackoverflow.com/questions/23229975/is-it-safe-to-remove-selected-keys-from-map-within-a-range-loop
-			// this is safe
-			v = nil
-			logger.Infof("Clean %v from ipCiphers", k)
-			delete(ipCiphers, k)
+		pl = append(pl, pair{k, v.last})
+	}
+	sort.Slice(pl, func(i, j int) bool {
+		return pl[i].last < pl[j].last
+	})
+
+	for _, p := range pl {
+		if now-ipCiphers[p.ip].last > 3600 {
+			logger.Infof("Clean %v from ipCiphers, last request %v ago", p.ip, now-ipCiphers[p.ip].last)
+			delete(ipCiphers, p.ip)
+			if len(ipCiphers) < 10000 {
+				break
+			}
 		}
 	}
 }
