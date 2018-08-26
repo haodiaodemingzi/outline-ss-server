@@ -123,7 +123,7 @@ func findAccessKey(clientConn onet.DuplexConn, cipherList map[string]shadowaead.
 	if meta != nil {
 		meta.tries++
 		if meta.tries >= 10 {
-			meta.ban = true
+			// meta.ban = true
 			meta.banTime = time.Now().Unix() + 300
 			meta.tries = 0
 			logger.Infof("ban IP %v, until %v", ipStr, meta.banTime)
