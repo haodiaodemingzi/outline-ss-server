@@ -26,7 +26,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nirocfz/outline-ss-server/metrics"
+	"github.com/Jigsaw-Code/outline-ss-server/metrics"
 	"github.com/nirocfz/outline-ss-server/shadowsocks"
 	"github.com/op/go-logging"
 	"github.com/oschwald/geoip2-golang"
