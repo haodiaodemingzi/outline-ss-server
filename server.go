@@ -29,7 +29,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Jigsaw-Code/outline-ss-server/metrics"
+	"github.com/nirocfz/outline-ss-server/metrics"
+	"github.com/nirocfz/outline-ss-server/shadowsocks"
 	"github.com/op/go-logging"
 	"github.com/oschwald/geoip2-golang"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -44,10 +45,6 @@ func init() {
 	logging.SetFormatter(logging.MustStringFormatter("%{color}%{level:.1s}%{time:2006-01-02T15:04:05.000Z07:00} %{pid} %{shortfile}]%{color:reset} %{message}"))
 	logging.SetBackend(logging.NewLogBackend(os.Stderr, "", 0))
 	logger = logging.MustGetLogger("")
-}
-
-var config struct {
-	UDPTimeout time.Duration
 }
 
 type IPMeta struct {
@@ -142,16 +139,17 @@ func trafficToJSON(t *traffic) string {
 }
 
 // Listen on addr for incoming connections.
-func (port *SSPort) run(m metrics.ShadowsocksMetrics, r *net.UDPConn) {
+func (port *SSPort) run(natTimeout time.Duration, m metrics.ShadowsocksMetrics, r *net.UDPConn) {
 	// TODO: Register initial data metrics at zero.
-	go runUDPService(port.packetConn, &port.keys, m)
-	runTCPService(port.listener, &port.keys, m, r)
+	go shadowsocks.RunUDPService(natTimeout, port.packetConn, &port.keys, m)
+	shadowsocks.RunTCPService(port.listener, &port.keys, m, r)
 }
 
 type SSServer struct {
-	m      metrics.ShadowsocksMetrics
-	ports  map[int]*SSPort
-	report *net.UDPConn
+	natTimeout time.Duration
+	m          metrics.ShadowsocksMetrics
+	ports      map[int]*SSPort
+	report     *net.UDPConn
 }
 
 func (s *SSServer) startPort(portNum int) error {
@@ -166,7 +164,7 @@ func (s *SSServer) startPort(portNum int) error {
 	logger.Infof("Listening TCP and UDP on port %v", portNum)
 	port := &SSPort{listener: listener, packetConn: packetConn, keys: make(map[string]shadowaead.Cipher)}
 	s.ports[portNum] = port
-	go port.run(s.m, s.report)
+	go port.run(s.natTimeout, s.m, s.report)
 	return nil
 }
 
@@ -238,7 +236,7 @@ func (s *SSServer) loadConfig(filename string) error {
 	return nil
 }
 
-func runSSServer(filename string, sm metrics.ShadowsocksMetrics, reportAddr string) error {
+func runSSServer(filename string, natTimeout time.Duration, sm metrics.ShadowsocksMetrics, reportAddr string) error {
 	var conn *net.UDPConn
 	if len(reportAddr) > 0 {
 		addr, err := net.ResolveUDPAddr("udp", reportAddr)
@@ -250,7 +248,7 @@ func runSSServer(filename string, sm metrics.ShadowsocksMetrics, reportAddr stri
 			logger.Errorf("WARN Could not dial: %v", reportAddr)
 		}
 	}
-	server := &SSServer{m: sm, ports: make(map[int]*SSPort), report: conn}
+	server := &SSServer{natTimeout: natTimeout, m: sm, ports: make(map[int]*SSPort), report: conn}
 	err := server.loadConfig(filename)
 	if err != nil {
 		return fmt.Errorf("Failed to load config file %v: %v", filename, err)
@@ -295,11 +293,12 @@ func main() {
 		ReportAddr  string
 		IPCountryDB string
 		Verbose     bool
+		natTimeout  time.Duration
 	}
 	flag.StringVar(&flags.ConfigFile, "config", "", "Configuration filename")
 	flag.StringVar(&flags.MetricsAddr, "metrics", "", "Address for the Prometheus metrics")
 	flag.StringVar(&flags.IPCountryDB, "ip_country_db", "", "Path to the GeoLite2-Country.mmdb file")
-	flag.DurationVar(&config.UDPTimeout, "udptimeout", 5*time.Minute, "UDP tunnel timeout")
+	flag.DurationVar(&flags.natTimeout, "udptimeout", 5*time.Minute, "UDP tunnel timeout")
 	flag.StringVar(&flags.ReportAddr, "report", "", "address to report traffic")
 	flag.BoolVar(&flags.Verbose, "verbose", false, "Enables verbose logging output")
 
@@ -334,7 +333,7 @@ func main() {
 		}
 		defer ipCountryDB.Close()
 	}
-	err = runSSServer(flags.ConfigFile, metrics.NewShadowsocksMetrics(ipCountryDB), flags.ReportAddr)
+	err = runSSServer(flags.ConfigFile, flags.natTimeout, metrics.NewShadowsocksMetrics(ipCountryDB), flags.ReportAddr)
 	if err != nil {
 		logger.Fatal(err)
 	}
